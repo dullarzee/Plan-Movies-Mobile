@@ -1,28 +1,53 @@
+import { mainMovieTypes } from "@/app/(tabs)/home";
+import { SelectedMovie } from "@/app/lib/contexts";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { LinearGradient } from "expo-linear-gradient";
-import {
-    Image,
-    ImageSourcePropType,
-    StyleSheet,
-    Text,
-    View,
-} from "react-native";
+import { useRouter } from "expo-router";
+import { useContext } from "react";
+import { Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 export default function FeaturedMovieCard({
+    id,
     title,
-    image,
+    imageUrl,
+    videoUrl,
+    date_created,
+    time_created,
+    genres,
     catchPhrase,
-}: {
-    title: string;
-    image: ImageSourcePropType;
-    catchPhrase: string;
-}) {
+    featuredMovieCardWidth,
+    index,
+}: mainMovieTypes) {
+    const { setMainMovieData, setMovieType } = useContext(SelectedMovie);
+    const router = useRouter();
+    const handlePress = () => {
+        const data = {
+            id: id,
+            title: title,
+            imageUrl: imageUrl,
+            videoUrl: videoUrl,
+            date_created: date_created,
+            time_created: time_created,
+            genres: genres,
+        };
+        setMainMovieData(data);
+        setMovieType("mainMovie");
+        setTimeout(() => {
+            router.push("/watch");
+        }, 200);
+    };
     return (
-        <View style={styles.featured}>
+        <View
+            style={styles.featured}
+            onLayout={(event) => {
+                featuredMovieCardWidth!.current =
+                    event.nativeEvent.layout.width;
+            }}
+        >
             <Image
                 style={styles.featuredImage}
                 resizeMode="cover"
-                source={image}
+                source={{ uri: imageUrl }}
             />
             <LinearGradient
                 colors={["rgba(0, 0, 0, 0.75)", "rgba(0, 0, 0, 0)"]}
@@ -30,14 +55,29 @@ export default function FeaturedMovieCard({
                 end={{ x: 0.5, y: 0.4 }}
                 style={styles.featuredImageOverlay}
             >
-                <Text style={styles.movieTitle}>Featured: {title}</Text>
+                <Text style={styles.movieTitle} numberOfLines={2}>
+                    <Text
+                        style={{
+                            color: "gold",
+                            fontWeight: "600",
+                        }}
+                    >
+                        Featured:
+                    </Text>{" "}
+                    {title}
+                </Text>
                 <View>
-                    <Text style={styles.subHeading}>{catchPhrase}</Text>
+                    <Text style={styles.subHeading} numberOfLines={1}>
+                        {catchPhrase}
+                    </Text>
                 </View>
-                <View style={styles.watchNowButton}>
+                <TouchableOpacity
+                    onPress={handlePress}
+                    style={styles.watchNowButton}
+                >
                     <Ionicons name="play-outline" size={20} color="white" />
                     <Text style={[styles.watchNowText]}>Watch Now</Text>
-                </View>
+                </TouchableOpacity>
             </LinearGradient>
         </View>
     );
@@ -64,6 +104,8 @@ const styles = StyleSheet.create({
         paddingTop: "25%",
         borderRadius: 13,
         alignItems: "flex-start",
+        justifyContent: "space-between",
+        paddingBottom: 15,
     },
     movieTitle: {
         fontSize: 21,

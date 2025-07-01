@@ -1,25 +1,37 @@
 //import { useFonts } from "expo-font";
-import { Audio } from "expo-av";
 import { Stack } from "expo-router";
-import { useEffect } from "react";
-import { SafeAreaView } from "react-native";
+import { Platform, SafeAreaView, StatusBar, StyleSheet } from "react-native";
+import SelectedMovieProvider from "./lib/contexts";
 
 export default function RootLayout() {
     /*const [loaded] = useFonts({
         SpaceMono: require("../assets/fonts/SpaceMono-Regular.ttf"),
     });*/
 
-    useEffect(() => {
-        Audio.setAudioModeAsync({
-            allowsRecordingIOS: false,
-            staysActiveInBackground: true,
-            playsInSilentModeIOS: true,
-        },);
-    },[]);
-
     return (
-        <SafeAreaView style={{ flex: 1, backgroundColor: "white" }}>
-            <Stack screenOptions={{ headerShown: false }}></Stack>
-        </SafeAreaView>
+        <>
+            <SafeAreaView
+                style={[
+                    styles.SafeAreaView,
+                    { flex: 1, backgroundColor: "white" },
+                ]}
+            >
+                <StatusBar barStyle="light-content" />
+                <SelectedMovieProvider>
+                    <Stack screenOptions={{ headerShown: false }}></Stack>
+                </SelectedMovieProvider>
+            </SafeAreaView>
+        </>
     );
 }
+
+const styles = StyleSheet.create({
+    SafeAreaView: {
+        paddingTop:
+            Platform.OS === "android"
+                ? StatusBar.currentHeight -5
+                : Platform.OS === "ios"
+                ? 15
+                : 0,
+    },
+});

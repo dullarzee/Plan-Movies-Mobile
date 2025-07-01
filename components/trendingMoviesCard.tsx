@@ -1,25 +1,53 @@
+import { mainMovieTypes } from "@/app/(tabs)/home";
+import { SelectedMovie } from "@/app/lib/contexts";
 import Ionicons from "@expo/vector-icons/Ionicons";
+import { useRouter } from "expo-router";
+import { useContext } from "react";
 import {
     Image,
-    ImageSourcePropType,
+    Platform,
+    Pressable,
     StyleSheet,
     Text,
     View,
 } from "react-native";
 
 export default function TrendingMoviesCard({
+    id,
     title,
-    image,
-    genre,
-}: {
-    title: string;
-    image: ImageSourcePropType;
-    genre: string;
-}) {
+    imageUrl,
+    genres,
+    rating,
+    videoUrl,
+    date_created,
+    time_created,
+}: mainMovieTypes) {
+    const { setMainMovieData, setMovieType } = useContext(SelectedMovie);
+    const router = useRouter();
+    const index = genres.indexOf(",");
+    const genre = genres.slice(0, index);
+
+    const handlePress = () => {
+        const data = {
+            id: id,
+            title: title,
+            imageUrl: imageUrl,
+            genres: genres,
+            rating: rating,
+            videoUrl: videoUrl,
+            date_created: date_created,
+            time_created: time_created,
+        };
+        setMainMovieData(data);
+        setMovieType("mainMovie");
+        setTimeout(() => {
+            router.push("/watch");
+        });
+    };
     return (
         <View style={styles.outermost}>
             <View style={styles.imageContainer}>
-                <Image source={image} style={styles.image} />
+                <Image source={{ uri: imageUrl }} style={styles.image} />
             </View>
             <View style={styles.detailsContainer}>
                 <View>
@@ -28,12 +56,12 @@ export default function TrendingMoviesCard({
                 </View>
                 <View style={styles.ratingContainer}>
                     <Ionicons name="star-outline" color="gold" />
-                    <Text>9.2</Text>
+                    <Text>{rating}</Text>
                 </View>
             </View>
-            <View style={styles.play}>
+            <Pressable onPress={handlePress} style={styles.play}>
                 <Ionicons name="play-outline" size={21} />
-            </View>
+            </Pressable>
         </View>
     );
 }
@@ -47,13 +75,24 @@ const styles = StyleSheet.create({
         flexDirection: "row",
         padding: 9,
         borderRadius: 8,
-        shadowOffset: {
-            width: 0,
-            height: 5,
-        },
-        shadowColor: "rgba(0,0,0,0.3)",
-        shadowOpacity: 0.17,
-        elevation: 5,
+        backgroundColor: "white",
+        ...Platform.select({
+            ios: {
+                shadowOffset: { width: 0, height: 6 },
+                shadowColor: "#a9a9a9",
+                shadowOpacity: 0.3,
+                shadowRadius: 5,
+            },
+            web: {
+                shadowOffset: { width: 0, height: 6 },
+                shadowColor: "#a9a9a9",
+                shadowOpacity: 0.3,
+                shadowRadius: 5,
+            },
+            android: {
+                elevation: 5,
+            },
+        }),
     },
     imageContainer: {
         flex: 3,

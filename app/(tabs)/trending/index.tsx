@@ -1,18 +1,45 @@
-import { trendingMovies } from "@/app/lib/data";
+import Supabase from "@/app/lib/supabase";
 import TrendingMoviesCard from "@/components/trendingMoviesCard";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { LinearGradient } from "expo-linear-gradient";
+import { Dispatch, useEffect, useState } from "react";
 import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
+import { mainMovieTypes } from "../home";
 
 export default function TrendingScreen() {
+    const [trendingData, setTrendingData] = useState<mainMovieTypes[]>([]);
+    const [threshold, setThreshold] = useState<number>(6);
+
+    useEffect(() => {
+        const fetchIt = async () => {
+            try {
+                const { data } = await Supabase.from("mobile-main-table")
+                    .select("*")
+                    .eq("isTrending", true);
+                setTrendingData(() => data as mainMovieTypes[]);
+                console.log("trending:", data);
+                console.log("trendingData state:", trendingData);
+            } catch (error) {
+                console.error("failed in getting trending movies:", error);
+            }
+        };
+        fetchIt();
+    }, []);
+
     return (
         <View style={styles.outermost}>
             <FlatList
-                data={trendingMovies.slice(0, 5)}
+                data={trendingData.slice(0, threshold)}
                 renderItem={({ item }) => <TrendingMoviesCard {...item} />}
                 contentContainerStyle={styles.CCS1}
                 ListHeaderComponent={<TrendingListHeader />}
-                ListFooterComponent={<TrendingListFooter />}
+                ListFooterComponent={
+                    <TrendingListFooter
+                        threshold={threshold}
+                        trendingData={trendingData}
+                        setThreshold={setThreshold}
+                    />
+                }
             />
         </View>
     );
@@ -31,24 +58,33 @@ export function TrendingListHeader() {
         </View>
     );
 }
-export function TrendingListFooter() {
-    return (
-        <LinearGradient
-            colors={["rgb(206, 25, 252)", "rgb(243, 14, 193)"]}
-            start={{ x: 0, y: 0.5 }}
-            end={{ x: 1, y: 0.5 }}
-            style={styles.footerOutermost}
-        >
-            <Text style={styles.footerText1}>Trending This Week</Text>
-            <Text style={styles.footerText2}>
-                Don&apos;t miss out on the most popular movies everyone is
-                talking about!
-            </Text>
-            <Pressable>
-                <Text style={styles.footerButton}>View All Trending</Text>
-            </Pressable>
-        </LinearGradient>
-    );
+export function TrendingListFooter({
+    threshold,
+    trendingData,
+    setThreshold,
+}: {
+    threshold: number;
+    trendingData: mainMovieTypes[];
+    setThreshold: Dispatch<React.SetStateAction<number>>;
+}) {
+    if (threshold !== trendingData.length)
+        return (
+            <LinearGradient
+                colors={["rgb(206, 25, 252)", "rgb(243, 14, 193)"]}
+                start={{ x: 0, y: 0.5 }}
+                end={{ x: 1, y: 0.5 }}
+                style={styles.footerOutermost}
+            >
+                <Text style={styles.footerText1}>Trending This Week</Text>
+                <Text style={styles.footerText2}>
+                    Don&apos;t miss out on the most popular movies everyone is
+                    talking about!
+                </Text>
+                <Pressable onPress={() => setThreshold(trendingData.length)}>
+                    <Text style={styles.footerButton}>View All Trending</Text>
+                </Pressable>
+            </LinearGradient>
+        );
 }
 
 const styles = StyleSheet.create({

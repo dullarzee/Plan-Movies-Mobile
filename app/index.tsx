@@ -1,5 +1,5 @@
 import { Link } from "expo-router";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 export default function StartupScreen() {
     return (
@@ -9,7 +9,6 @@ export default function StartupScreen() {
                     flex: 1,
                     justifyContent: "center",
                     alignItems: "center",
-                    //backgroundColor: "#f5f5f5",
                 }}
             >
                 <Text style={styles.welcomeHeader}>
@@ -17,9 +16,9 @@ export default function StartupScreen() {
                 </Text>
 
                 <Link href="./home">
-                    <View style={styles.button}>
+                    <TouchableOpacity style={styles.button}>
                         <Text style={{ color: "white" }}>Enter App</Text>
-                    </View>
+                    </TouchableOpacity>
                 </Link>
             </View>
         </>
@@ -28,7 +27,7 @@ export default function StartupScreen() {
 
 const styles = StyleSheet.create({
     welcomeHeader: {
-        fontSize: 32,
+        fontSize: 29,
         color: "rgba(235, 0, 0, 1)",
         fontWeight: "500",
         textAlign: "center",
@@ -39,5 +38,6 @@ const styles = StyleSheet.create({
         paddingVertical: 8,
         borderRadius: 8,
         margin: 7,
+        fontSize: 16,
     },
 });

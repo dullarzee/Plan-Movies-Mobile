@@ -1,29 +1,33 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
-import { Image, StyleSheet, Text, View } from "react-native";
+import { Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 export default function ContinueWatchingCard() {
     return (
-        <View style={styles.outermost}>
-            <View style={styles.imageContainer}>
-                <Image
-                    style={styles.image}
-                    //resizeMode="contain"
-                    source={require("../assets/images/theyClonedTyrone.jpg")}
-                />
-                <Text style={styles.duration}>
-                    <Ionicons
-                        name="time-outline"
-                        style={{ marginTop: 3 }}
-                        size={13}
+        <TouchableOpacity>
+            <View style={styles.outermost}>
+                <View style={styles.imageContainer}>
+                    <Image
+                        style={styles.image}
+                        //resizeMode="contain"
+                        source={require("../assets/images/theyClonedTyrone.jpg")}
                     />
-                    2h 15m
-                </Text>
+                    <Text style={styles.duration}>
+                        <Ionicons
+                            name="time-outline"
+                            style={{ marginTop: 3 }}
+                            size={13}
+                        />
+                        2h 15m
+                    </Text>
+                </View>
+                <View>
+                    <Text style={styles.movieTitle} numberOfLines={1}>
+                        They Cloned Tyrone
+                    </Text>
+                </View>
+                <Text style={styles.genre}>Sci-Fi</Text>
             </View>
-            <View>
-                <Text style={styles.movieTitle}>They Cloned Tyrone</Text>
-            </View>
-            <Text style={styles.genre}>Sci-Fi</Text>
-        </View>
+        </TouchableOpacity>
     );
 }
 

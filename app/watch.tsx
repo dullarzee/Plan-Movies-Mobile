@@ -1,19 +1,56 @@
+import BackButton from "@/components/backButton";
+import VideoProgressBar from "@/components/videoProgressBar";
+import VolumeBar from "@/components/volumeBar";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { useEventListener } from "expo";
 import { LinearGradient } from "expo-linear-gradient";
 import { useVideoPlayer, VideoView } from "expo-video";
-import { useEffect, useRef, useState } from "react";
+import React, { useContext, useEffect, useRef, useState } from "react";
 import {
     ActivityIndicator,
-    PanResponder,
-    Pressable,
+    Animated,
+    Easing,
+    GestureResponderEvent,
+    Image,
     StyleSheet,
     Text,
+    TouchableOpacity,
     View,
 } from "react-native";
+import { SelectedMovie } from "./lib/contexts";
+
+//i noticed when there is dragging to seek to a particular time,
+// the state resets to their default value so if u see code you dont understand,
+// i might be using some logic to circumvent that problem
+
+export type myVideoPlayerStates = {
+    isPlaying: boolean;
+    volume: number;
+    duration: number;
+    currentTime: number;
+    isLoading: boolean;
+    isFullScreen: boolean;
+    isMuted: boolean;
+    isDragging: boolean;
+};
+
+export let setMyVideoPlayerStates: React.Dispatch<
+    React.SetStateAction<{
+        isPlaying: boolean;
+        volume: number;
+        duration: number;
+        currentTime: number;
+        isLoading: boolean;
+        isFullScreen: boolean;
+        isMuted: boolean;
+        isDragging: boolean;
+    }>
+>;
 
 export default function Watch() {
+    const { selectedEpisode, movieType, mainMovieSelected } =
+        useContext(SelectedMovie);
     const [videoPlayerStates, setVideoPlayerStates] = useState({
         isPlaying: false,
         volume: 1.0,
@@ -24,13 +61,19 @@ export default function Watch() {
         isMuted: false,
         isDragging: false,
     });
-    const [progressWidth, setProgressWidth] = useState(0);
-    const [dragValue, setDragValue] = useState(0);
-    const accumulatedDragValueRef = useRef(0);
+
+    const [visible, setVisible] = useState<boolean>(true);
+    const opacity = useRef(new Animated.Value(1)).current;
+    const hideTimeoutRef = useRef<NodeJS.Timeout | null | number>(null);
+    const playPauseRef = useRef([]);
+    const [likeStatus, setLikeStatus] = useState<string>("");
 
     //initializing a video player from expo-video
     const player = useVideoPlayer(
-        "https://sample-videos.com/video321/mp4/720/big_buck_bunny_720p_10mb.mp4" /*require("../assets/videos/SampleVideo_720x480_5mb.mp4")*/,
+        movieType === "seasonMovie"
+            ? selectedEpisode.videoUrl
+            : mainMovieSelected.videoUrl,
+        //"https://sample-videos.com/video321/mp4/720/big_buck_bunny_720p_10mb.mp4" ,
         (player) => {
             player.play();
             player.volume = 1.0;
@@ -38,73 +81,79 @@ export default function Watch() {
             player.loop = true;
         }
     );
+
+    // Fade in controls
+    const showControls = () => {
+        setVisible(true);
+        Animated.timing(opacity, {
+            toValue: 1,
+            duration: 250,
+            easing: Easing.out(Easing.ease),
+            useNativeDriver: true,
+        }).start();
+
+        // Reset hide timeout
+        if (hideTimeoutRef.current) clearTimeout(hideTimeoutRef.current);
+        if (player.status === "readyToPlay" && player.playing)
+            hideTimeoutRef.current = setTimeout(hideControls, 3000); // 3 seconds
+    };
+
+    // Fade out controls
+    const hideControls = () => {
+        Animated.timing(opacity, {
+            toValue: 0,
+            duration: 500,
+            easing: Easing.in(Easing.ease),
+            useNativeDriver: true,
+        }).start(() => setVisible(false));
+    };
+
+    // Show on first mount
     useEffect(() => {
-        if (dragValue < 0)
-            setProgressWidth((prevWidth) => Math.max(prevWidth - dragValue, 0));
-        else if (dragValue > 0)
-            setProgressWidth((prevWidth) =>
-                Math.min(prevWidth + dragValue, 100)
-            );
-    }, [dragValue]);
+        showControls();
+        if (hideTimeoutRef.current) clearTimeout(hideTimeoutRef.current);
+
+        if (!player.playing || player.status !== "readyToPlay")
+            opacity.setValue(1);
+        else {
+            if (hideTimeoutRef.current) clearTimeout(hideTimeoutRef.current);
+
+            hideTimeoutRef.current = setTimeout(hideControls, 3000); // 3 seconds
+        }
+
+        return () => {
+            if (hideTimeoutRef.current) clearTimeout(hideTimeoutRef.current);
+        };
+    }, [player.playing, player.status]);
+
+    const handleOverlayPress = (e: GestureResponderEvent) => {
+        e.stopPropagation();
+        showControls();
+        if (!player.playing)
+            if (hideTimeoutRef.current) clearTimeout(hideTimeoutRef.current);
+    };
 
     //a ref to the video player
     const videoRef = useRef(null);
-
-    //A ref for holding the progress bar width after the onLayout event has fired
-    const progressBarWidth = useRef<number>(0);
-
-    //a panresponder configuration for initialing the progress bar thumb/slider to respond to drag gestures
-    const videoProgressPan = useRef(
-        PanResponder.create({
-            onStartShouldSetPanResponder: () => true,
-            onMoveShouldSetPanResponder: () => true,
-            onPanResponderGrant: (e) => {
-                setVideoPlayerStates({
-                    ...videoPlayerStates,
-                    isDragging: true,
-                });
-                console.log("access granted");
-                const touchX = e.nativeEvent.locationX;
-                const percentage = Math.max(
-                    0,
-                    Math.min(100, (touchX / progressBarWidth.current) * 100)
-                );
-                setDragValue(() => percentage);
-            },
-
-            onPanResponderMove: (e) => {
-                console.log(e.nativeEvent.locationX);
-                const touchX = e.nativeEvent.locationX;
-                const percentage = (touchX / progressBarWidth.current) * 100;
-                setDragValue(() => percentage);
-                accumulatedDragValueRef.current =
-                    accumulatedDragValueRef.current + percentage;
-                console.log(accumulatedDragValueRef.current);
-                console.log("drag value:", dragValue);
-            },
-
-            onPanResponderRelease: () => {
-                console.log("touch released");
-                setVideoPlayerStates({
-                    ...videoPlayerStates,
-                    isDragging: false,
-                });
-                //accumulatedDragValueRef.current = 0;
-                console.log(
-                    "accumulated drag",
-                    accumulatedDragValueRef.current
-                );
-            },
-        })
-    ).current;
+    const overlayRef = useRef<LinearGradient>(null);
+    console.log("component rendered");
 
     //function for formatting time into a usable format
     const formatCurrentTime = (): string => {
-        if (videoPlayerStates.currentTime > 86400) {
-            return "0";
-        } else if (videoPlayerStates.currentTime <= 3600) {
-            const hours = Math.floor(videoPlayerStates.currentTime / 60);
-            const seconds = Math.ceil(videoPlayerStates.currentTime % 60);
+        if (player.currentTime > 3600 && player.currentTime < 86400) {
+            const hours = Math.floor(player.currentTime / 3600);
+            const minutes = Math.floor((player.currentTime % 3600) / 60);
+            const seconds = Math.floor((player.currentTime % 3600) % 60);
+            return `${String(hours).padStart(2, "0")}:${String(
+                minutes
+            ).padStart(2, "00")}:${String(seconds).padStart(2, "0")}`;
+        } else if (player.currentTime <= 3600) {
+            let hours: number = Math.floor(player.currentTime / 60);
+            let seconds: number = Math.floor(player.currentTime % 60);
+            if (seconds === 60) {
+                hours = hours + 1;
+                seconds = 0;
+            }
             return `${String(hours).padStart(2, "00")}:${String(
                 seconds
             ).padStart(2, "0")}`;
@@ -115,84 +164,89 @@ export default function Watch() {
 
     //function for formatting duration of video into a usable format
     const formatDuration = (): string => {
-        if (videoPlayerStates.duration > 86400) {
-            return "0";
-        } else if (videoPlayerStates.duration <= 3600) {
-            const hours = Math.floor(videoPlayerStates.duration / 60);
-            const seconds = Math.floor(videoPlayerStates.duration % 60);
-            return `${String(hours).padStart(2, "00")}:${String(
+        if (player.duration > 3600 && player.duration < 86400) {
+            const hours = Math.floor(player.duration / 3600);
+            const minutes = Math.floor((player.duration % 3600) / 60);
+            const seconds = Math.floor((player.duration % 3600) % 60);
+            return `${String(hours).padStart(2, "0")}:${String(
+                minutes
+            ).padStart(2, "00")}:${String(seconds).padStart(2, "0")}`;
+        } else if (player.duration <= 3600) {
+            const minutes = Math.floor(player.duration / 60);
+            const seconds = Math.floor(player.duration % 60);
+            return `${String(minutes).padStart(2, "00")}:${String(
                 seconds
             ).padStart(2, "0")}`;
         }
-        return "";
+        return "00:00";
     };
 
-    //event listener fo status changes like changes in loading states e.t.c
+    const formatDate = (date: string): string => {
+        const arr = date.split("-").reverse();
+        //converting day
+        let arr0: number[] = new Array(3).fill(0);
+        arr0[0] = Number(arr[0]);
+        arr0[1] = Number(arr[1]);
+        arr0[2] = Number(arr[2]);
+        let temp;
+        if (arr0[0] === 1) temp = `${arr0[0]}st`;
+        else if (arr0[0] === 2) temp = `${arr0[0]}nd`;
+        else if (arr0[0] === 3) temp = `${arr0[0]}rd`;
+        else temp = `${arr0[0]}th`;
+
+        //converting month
+        arr0[1] = Number(arr[1]);
+        let temp1;
+        if (arr0[1] === 1) temp1 = "Jan";
+        else if (arr0[1] === 2) temp1 = "Feb";
+        else if (arr0[1] === 3) temp1 = "Mar";
+        else if (arr0[1] === 4) temp1 = "Apr";
+        else if (arr0[1] === 5) temp1 = "May";
+        else if (arr0[1] === 6) temp1 = "Jun";
+        else if (arr0[1] === 7) temp1 = "Jul";
+        else if (arr0[1] === 8) temp1 = "Aug";
+        else if (arr0[1] === 9) temp1 = "Sep";
+        else if (arr0[1] === 10) temp1 = "Oct";
+        else if (arr0[1] === 11) temp1 = "Nov";
+        else if (arr0[1] === 12) temp1 = "Dec";
+        console.log(arr);
+        return `${temp} ${temp1} ${arr0[2]}`;
+    };
+
+    //event listener for status changes like changes in loading states e.t.c
     useEventListener(player, "statusChange", (payload) => {
         if (payload.status !== "readyToPlay") {
             console.log("not ready to play");
-            setVideoPlayerStates({
-                ...videoPlayerStates,
+            setVideoPlayerStates((prev) => ({
+                ...prev,
                 isLoading: true,
-            });
+                duration: player.duration,
+            }));
+            opacity.setValue(1);
         } else {
-            setVideoPlayerStates({
-                ...videoPlayerStates,
+            setVideoPlayerStates((prev) => ({
+                ...prev,
                 isLoading: false,
                 duration: player.duration,
-            });
+            }));
+            if (hideTimeoutRef.current) clearTimeout(hideTimeoutRef.current);
+            hideTimeoutRef.current = setTimeout(showControls, 3000);
         }
     });
-    useEventListener(player, "timeUpdate", (payload) => {
-        setVideoPlayerStates({
-            ...videoPlayerStates,
-            currentTime: payload.currentTime,
-        });
-    });
 
-    useEffect(() => {
-        const subscriptions = [
-            player.addListener("playingChange", ({ isPlaying }) => {
-                setVideoPlayerStates({
-                    ...videoPlayerStates,
-                    isPlaying: isPlaying,
-                });
-            }),
-        ];
-
-        //interval function for setting current time, progress width in UI e.t.c
-        const currentTimeIntervalId = setInterval(() => {
-            if (
-                player.playing &&
-                player.status === "readyToPlay" &&
-                !videoPlayerStates.isDragging
-            ) {
-                setProgressWidth(
-                    () => (player.currentTime / player.duration) * 100
-                );
-                setVideoPlayerStates({
-                    ...videoPlayerStates,
-                    currentTime: player.currentTime,
-                });
-            }
-        }, 1000);
-
-        return () => {
-            subscriptions.map((sub) => {
-                sub.remove();
-            });
-            clearInterval(currentTimeIntervalId);
-        };
-    });
     return (
         <View style={styles.outermost}>
             <View style={styles.headerBar}>
-                <Text style={styles.logo}>Plan Movies</Text>
+                <View style={{ flexDirection: "row", alignItems: "center" }}>
+                    <BackButton />
+                    <Text style={styles.logo}>Plan Movies</Text>
+                </View>
                 <View style={styles.searchContainer}>
                     <Ionicons name="search-outline" size={21} color="#898989" />
                     <View style={styles.avatar}></View>
                 </View>
             </View>
+
             <View style={styles.videoContainer}>
                 <VideoView
                     ref={videoRef}
@@ -201,151 +255,220 @@ export default function Watch() {
                     contentFit="contain"
                     nativeControls={false}
                 ></VideoView>
-                <LinearGradient
-                    style={styles.videoOverlay}
-                    colors={["rgba(25,25,25, 0.9)", "rgba(220,220, 220, 0)"]}
-                    start={{ x: 0.5, y: 1 }}
-                    end={{ x: 0.5, y: 0.8 }}
+                <TouchableOpacity
+                    style={[styles.pressableOverlay]}
+                    onPress={handleOverlayPress}
                 >
-                    <View style={styles.loadingIndicatorContainer}>
-                        {videoPlayerStates.isLoading ? (
-                            <ActivityIndicator size={30} color="#f5f5f5" />
-                        ) : (
-                            <Pressable
-                                onPress={() =>
-                                    player.playing === false
-                                        ? player.play()
-                                        : player.pause()
-                                }
-                                style={styles.largePlayPauseButton}
-                            >
-                                {videoPlayerStates.isPlaying ? (
-                                    <Ionicons
-                                        name="pause"
+                    <Animated.View
+                        pointerEvents={visible ? "auto" : "none"}
+                        style={[styles.animatedOverlay, { opacity: opacity }]}
+                    >
+                        <LinearGradient
+                            ref={overlayRef}
+                            style={styles.videoOverlay}
+                            colors={[
+                                "rgba(25,25,25, 0.9)",
+                                "rgba(220,220, 220, 0)",
+                            ]}
+                            start={{ x: 0.5, y: 1 }}
+                            end={{ x: 0.5, y: 0.8 }}
+                        >
+                            <View style={styles.loadingIndicatorContainer}>
+                                {player.status !== "readyToPlay" ? (
+                                    <ActivityIndicator
                                         size={30}
-                                        color="#f5f5f5"
+                                        color="#e50000"
                                     />
                                 ) : (
-                                    <Ionicons
-                                        name="play"
-                                        size={30}
-                                        color="#f5f5f5"
-                                    />
+                                    <TouchableOpacity
+                                        onPress={() =>
+                                            player.playing === false
+                                                ? player.play()
+                                                : player.pause()
+                                        }
+                                        style={styles.largePlayPauseButton}
+                                    >
+                                        {player.playing ? (
+                                            <Ionicons
+                                                name="pause"
+                                                size={30}
+                                                color="#f5f5f5"
+                                            />
+                                        ) : (
+                                            <Ionicons
+                                                name="play"
+                                                size={30}
+                                                color="#f5f5f5"
+                                            />
+                                        )}
+                                    </TouchableOpacity>
                                 )}
-                            </Pressable>
-                        )}
-                    </View>
-                    <View style={styles.videoProgressContainer}>
-                        <View
-                            style={styles.videoProgressBar}
-                            onLayout={(event) => {
-                                progressBarWidth.current =
-                                    event.nativeEvent.layout.width;
-                            }}
-                        >
-                            <View
-                                style={[
-                                    styles.videoProgressBar2,
-                                    { width: `${progressWidth}%` },
-                                ]}
-                            ></View>
-                            <View
-                                style={[
-                                    styles.videoProgressSlider,
-                                    {
-                                        transform: [
-                                            {
-                                                scale: videoPlayerStates.isDragging
-                                                    ? 1.4
-                                                    : 1,
-                                            },
-                                        ],
-                                    },
-                                ]}
-                                {...videoProgressPan.panHandlers}
-                            ></View>
-                        </View>
-                    </View>
-                    <View style={styles.controlsContainer}>
-                        <View
-                            style={{
-                                columnGap: "15%",
-                                flexDirection: "row",
-                                //width: "85%",
-                            }}
-                        >
-                            <Ionicons
-                                name="play-skip-back"
-                                size={18}
-                                color="white"
-                            />
-                            <Pressable
-                                onPress={() =>
-                                    player.playing === false
-                                        ? player.play()
-                                        : player.pause()
-                                }
-                            >
-                                {videoPlayerStates.isPlaying === false ? (
-                                    <Ionicons
-                                        name="play"
-                                        size={18}
-                                        color="white"
-                                    />
-                                ) : (
-                                    <Ionicons
-                                        name="pause"
-                                        size={18}
-                                        color="white"
-                                    />
-                                )}
-                            </Pressable>
-                            <Ionicons
-                                name="play-skip-forward"
-                                size={18}
-                                color="white"
-                            />
-                        </View>
-                        <View style={styles.volumeContainer}>
-                            <Ionicons
-                                name="volume-low"
-                                size={18}
-                                color="white"
-                            />
-                            <View style={styles.volumeBar}>
-                                <View style={styles.volumeSlider}></View>
                             </View>
-                        </View>
+                            <VideoProgressBar
+                                videoPlayerStates={videoPlayerStates}
+                                setVideoPlayerStates={setVideoPlayerStates}
+                                player={player}
+                            />
 
-                        <View
-                            style={{
-                                flexDirection: "row",
-                                alignItems: "center",
-                                columnGap: "10%",
-                            }}
-                        >
-                            <View style={styles.timeContainer}>
-                                <Text style={styles.currentTime}>
-                                    {formatCurrentTime()}
-                                </Text>
-                                <Text style={{ color: "white" }}>/</Text>
-                                <Text style={styles.duration}>
-                                    {formatDuration()}
-                                </Text>
+                            <View style={styles.controlsContainer}>
+                                <View
+                                    style={{
+                                        justifyContent: "space-between",
+                                        flexDirection: "row",
+                                        width: "23.5%",
+                                    }}
+                                >
+                                    <Ionicons
+                                        name="play-skip-back"
+                                        size={18}
+                                        color="white"
+                                    />
+                                    <TouchableOpacity
+                                        ref={playPauseRef.current[1]}
+                                        onPress={() =>
+                                            player.playing === false
+                                                ? player.play()
+                                                : player.pause()
+                                        }
+                                    >
+                                        {player.playing === false ? (
+                                            <Ionicons
+                                                name="play"
+                                                size={18}
+                                                color="white"
+                                            />
+                                        ) : (
+                                            <Ionicons
+                                                name="pause"
+                                                size={18}
+                                                color="white"
+                                            />
+                                        )}
+                                    </TouchableOpacity>
+                                    <Ionicons
+                                        name="play-skip-forward"
+                                        size={18}
+                                        color="white"
+                                    />
+                                </View>
+
+                                <VolumeBar player={player} />
+
+                                <View
+                                    style={{
+                                        flexDirection: "row",
+                                        alignItems: "center",
+                                        columnGap: 10,
+                                    }}
+                                >
+                                    <View style={styles.timeContainer}>
+                                        <Text style={styles.currentTime}>
+                                            {formatCurrentTime()}
+                                        </Text>
+                                        <Text style={{ color: "white" }}>
+                                            /
+                                        </Text>
+                                        <Text style={styles.duration}>
+                                            {formatDuration()}
+                                        </Text>
+                                    </View>
+                                    <Ionicons
+                                        name="settings-outline"
+                                        size={18}
+                                        color="white"
+                                    />
+                                    <MaterialIcons
+                                        name="fullscreen"
+                                        size={23}
+                                        color="white"
+                                    />
+                                </View>
                             </View>
-                            <Ionicons
-                                name="settings-outline"
-                                size={18}
-                                color="white"
-                            />
-                            <MaterialIcons
-                                name="fullscreen"
-                                size={23}
-                                color="white"
-                            />
-                        </View>
-                    </View>
-                </LinearGradient>
+                        </LinearGradient>
+                    </Animated.View>
+                </TouchableOpacity>
+            </View>
+
+            <View style={{ marginVertical: 10 }}>
+                <Text style={styles.mainTitle}>
+                    {movieType === "seasonMovie"
+                        ? selectedEpisode.title
+                        : mainMovieSelected.title}
+                </Text>
+                {movieType === "seasonMovie" &&
+                selectedEpisode.episode !== null ? (
+                    <Text
+                        style={{ color: "rgb(220, 0, 0)" }}
+                    >{`Episode ${selectedEpisode.episode}`}</Text>
+                ) : (
+                    ""
+                )}
+            </View>
+            <View style={styles.extraInfoContainer}>
+                <View style={styles.avatarPoster}>
+                    <Image
+                        style={{
+                            width: "100%",
+                            height: "100%",
+                            borderRadius: 9999,
+                        }}
+                        source={{
+                            uri:
+                                movieType === "seasonMovie"
+                                    ? selectedEpisode.imageUrl
+                                    : mainMovieSelected.imageUrl,
+                        }}
+                    />
+                </View>
+                <View>
+                    <Text style={{ color: "#888888", fontSize: 14 }}>
+                        {movieType === "seasonMovie"
+                            ? formatDate(selectedEpisode.date_created)
+                            : formatDate(mainMovieSelected.date_created)}
+                    </Text>
+                    <Text
+                        style={{
+                            color: "#888888",
+                            fontSize: 11,
+                        }}
+                    >
+                        {movieType === "seasonMovie"
+                            ? selectedEpisode.time_created
+                            : mainMovieSelected.time_created}
+                    </Text>
+                </View>
+                <View style={styles.likeUnlikeContainer}>
+                    <TouchableOpacity onPress={() => setLikeStatus("liked")}>
+                        <Ionicons
+                            name="thumbs-up"
+                            color={likeStatus === "liked" ? "#d70000" : "white"}
+                            size={20}
+                        />
+                    </TouchableOpacity>
+                    <View
+                        style={{
+                            borderWidth: 1,
+                            borderColor: "#666666",
+                            height: "100%",
+                            width: 0,
+                        }}
+                    ></View>
+                    <TouchableOpacity onPress={() => setLikeStatus("disliked")}>
+                        <Ionicons
+                            name="thumbs-down"
+                            color={
+                                likeStatus === "disliked" ? "#d70000" : "white"
+                            }
+                            size={20}
+                        />
+                    </TouchableOpacity>
+                </View>
+            </View>
+            <View style={{ flexDirection: "row" }}>
+                <View style={styles.shareContainer}>
+                    <Ionicons name="share-outline" color={"white"} size={20} />
+                    <Text style={{ color: "white" }}>Share</Text>
+                </View>
             </View>
         </View>
     );
@@ -401,40 +524,24 @@ const styles = StyleSheet.create({
         zIndex: 20,
         opacity: 1,
     },
-    videoProgressContainer: {
-        flexDirection: "row",
-        alignItems: "center",
+    animatedOverlay: {
+        position: "absolute",
         width: "100%",
-        height: 10,
-        justifyContent: "center",
-        columnGap: "3%",
-    },
-    videoProgressBar: {
-        flexDirection: "row",
-        alignItems: "center",
-        width: "93%",
-        height: 3,
-        backgroundColor: "#b9b9b9",
-    },
-    videoProgressBar2: {
         height: "100%",
-        backgroundColor: "red",
     },
-    videoProgressSlider: {
-        width: 10,
-        height: 10,
-        borderRadius: 9999,
-        backgroundColor: "rgba(255, 0, 0,1)",
+    pressableOverlay: {
+        position: "absolute",
+        width: "100%",
+        height: "100%",
     },
     controlsContainer: {
         flexDirection: "row",
         height: 40,
         width: "100%",
         alignItems: "center",
-        paddingHorizontal: 5,
-        columnGap: 8,
-        justifyContent: "space-evenly",
-        paddingRight: "5%",
+        columnGap: 10,
+        justifyContent: "space-between",
+        paddingHorizontal: "5%",
     },
     volumeContainer: {
         width: "28%",
@@ -480,5 +587,38 @@ const styles = StyleSheet.create({
         width: 50,
         height: 50,
         backgroundColor: "rgba(255,255,255,0.2)",
+    },
+    mainTitle: {
+        fontSize: 21,
+        color: "#333333",
+        fontWeight: "500",
+    },
+    extraInfoContainer: {
+        flexDirection: "row",
+        columnGap: 10,
+        alignItems: "center",
+    },
+    avatarPoster: {
+        borderRadius: 9999,
+        width: 40,
+        height: 40,
+        backgroundColor: "#d5d5d5",
+        marginVertical: 10,
+        borderColor: "#c90000",
+    },
+    likeUnlikeContainer: {
+        flexDirection: "row",
+        padding: 8,
+        backgroundColor: "#b2b2b2",
+        borderRadius: 9999,
+        columnGap: 15,
+    },
+    shareContainer: {
+        flexDirection: "row",
+        backgroundColor: "#a100f9",
+        borderRadius: 9999,
+        padding: 7,
+        alignItems: "center",
+        columnGap: 3,
     },
 });

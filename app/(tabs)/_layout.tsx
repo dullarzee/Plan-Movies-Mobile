@@ -8,7 +8,7 @@ export default function AppLayout() {
             screenOptions={{
                 tabBarActiveTintColor: "white",
                 headerShown: false,
-                tabBarActiveBackgroundColor: "gray",
+                tabBarActiveBackgroundColor: "rgb(245, 133, 42)",
                 tabBarStyle: {
                     position: "absolute",
                     height: 62,
@@ -34,6 +34,20 @@ export default function AppLayout() {
                     title: "Trending",
                     tabBarIcon: ({ color }) => (
                         <Ionicons name="trending-up" color={color} size={21} />
+                    ),
+                }}
+            />
+
+            <Tabs.Screen
+                name="reels/index"
+                options={{
+                    title: "Reels",
+                    tabBarIcon: ({ color }) => (
+                        <Ionicons
+                            name="videocam-outline"
+                            color={color}
+                            size={21}
+                        />
                     ),
                 }}
             />
