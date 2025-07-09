@@ -1,77 +1,91 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { VideoPlayer } from "expo-video";
 import { useEffect, useRef, useState } from "react";
-import { PanResponder, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
+import Animated, {
+    useSharedValue,
+    useAnimatedStyle,
+    runOnJS,
+} from "react-native-reanimated";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
 
 export default function VolumeBar({ player }: { player: VideoPlayer }) {
-    const [dragValue, setDragValue] = useState<number>(0);
     const [volume, setVolume] = useState<number>(player.muted ? 0 : 100);
     const [isDragging, setIsDragging] = useState<boolean>(false);
+    const currentVolume = useSharedValue(player.muted ? 0 : 100);
+    const volumeBarWidth = useSharedValue(0);
+    const startX = useSharedValue(0);
 
-    useEffect(() => {
-        setVolume((prevValue) =>
-            Math.max(0, Math.min(prevValue + dragValue, 100))
+    const thumbSlider = useAnimatedStyle(() => {
+        return {
+            transform: [{ scale: isDragging ? 1.25 : 1 }],
+        };
+    });
+    const volumeFill = useAnimatedStyle(() => {
+        return {
+            width: currentVolume.value,
+        };
+    });
+
+    const handleVolume = () => {
+        player.volume = Math.max(
+            0,
+            Math.min(currentVolume.value / volumeBarWidth.value, 1)
         );
-        player.volume = volume / 100;
-        //console.log(volume);
-        if (volume === 0) player.muted = true;
-        else player.muted = false;
-    }, [dragValue]);
+        setVolume(player.volume * 100);
+    };
 
-    const volumeBarWidth = useRef<number>(0);
-    const volumeSliderPan = useRef(
-        PanResponder.create({
-            onStartShouldSetPanResponder: () => true,
-            onMoveShouldSetPanResponder: () => true,
-            onPanResponderGrant: () => {
-                console.log("access granted");
-                setIsDragging(true);
-            },
-            onPanResponderMove: (e, gestureState) => {
-                const touchX = e.nativeEvent.locationX;
-                const percentage = (touchX / volumeBarWidth.current) * 100;
-                setDragValue(() => percentage);
-                console.log("player volume:", player.volume);
-                console.log("is player muted?", player.muted);
-            },
-            onPanResponderRelease: () => {
-                setIsDragging(false);
-            },
+    const handleDrag = Gesture.Pan()
+        .onStart(() => {
+            startX.value = currentVolume.value;
+            runOnJS(setIsDragging)(true);
         })
-    ).current;
+        .onUpdate((e) => {
+            currentVolume.value = Math.max(
+                0,
+                Math.min(startX.value + e.translationX, volumeBarWidth.value)
+            );
+
+            runOnJS(handleVolume)();
+        })
+        .onEnd(() => {
+            runOnJS(setIsDragging)(false);
+        })
+        .minDistance(0) // Allow immediate response
+        .maxPointers(1) // Only allow single touch
+        .runOnJS(false);
 
     return (
         <View style={styles.volumeContainer}>
-            <Ionicons
-                name={
-                    player.muted
-                        ? "volume-mute-outline"
-                        : volume > 0 && volume <= 30
-                        ? "volume-low"
-                        : volume > 30 && volume <= 70
-                        ? "volume-medium"
-                        : "volume-high"
-                }
-                size={18}
-                color="white"
-            />
+            <View style={styles.volumeIcon}>
+                <Ionicons
+                    name={
+                        player.muted || volume === 0
+                            ? "volume-mute-outline"
+                            : volume > 0 && volume <= 30
+                            ? "volume-low"
+                            : volume > 30 && volume <= 70
+                            ? "volume-medium"
+                            : "volume-high"
+                    }
+                    size={18}
+                    color="white"
+                />
+            </View>
             <View
                 style={[styles.volumeBar]}
                 onLayout={(e) => {
-                    volumeBarWidth.current = e.nativeEvent.layout.width;
-                    console.log(volumeBarWidth.current);
+                    volumeBarWidth.value = e.nativeEvent.layout.width;
                 }}
             >
-                <View
-                    style={[styles.volumeBarFill, { width: `${volume}%` }]}
-                ></View>
-                <View
-                    style={[
-                        styles.volumeSlider,
-                        { transform: [{ scale: isDragging ? 1.3 : 1 }] },
-                    ]}
-                    {...volumeSliderPan.panHandlers}
-                ></View>
+                <Animated.View
+                    style={[styles.volumeBarFill, volumeFill]}
+                ></Animated.View>
+                <GestureDetector gesture={handleDrag}>
+                    <Animated.View
+                        style={[styles.volumeSlider, thumbSlider]}
+                    ></Animated.View>
+                </GestureDetector>
             </View>
         </View>
     );
@@ -82,10 +96,14 @@ const styles = StyleSheet.create({
         width: 75,
         flexDirection: "row",
         alignItems: "center",
+        columnGap: 3,
+    },
+    volumeIcon: {
+        flex: 1,
     },
     volumeBar: {
+        flex: 3,
         flexDirection: "row",
-        width: "65%",
         height: 4,
         backgroundColor: "#b9b9b9",
         alignItems: "center",
@@ -93,8 +111,11 @@ const styles = StyleSheet.create({
     volumeBarFill: {
         backgroundColor: "white",
         height: "100%",
+        maxWidth: "100%",
     },
     volumeSlider: {
+        position: "relative",
+        left: -5,
         width: 10,
         height: 10,
         borderRadius: 9999,

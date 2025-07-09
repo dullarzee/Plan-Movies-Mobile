@@ -2,7 +2,13 @@ import type { myVideoPlayerStates } from "@/app/watch";
 import { setMyVideoPlayerStates } from "@/app/watch";
 import { VideoPlayer } from "expo-video";
 import { useEffect, useRef, useState } from "react";
-import { PanResponder, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
+import Animated, {
+    useSharedValue,
+    useAnimatedStyle,
+    runOnJS,
+} from "react-native-reanimated";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
 
 export default function VideoProgressBar({
     videoPlayerStates,
@@ -13,90 +19,10 @@ export default function VideoProgressBar({
     setVideoPlayerStates: typeof setMyVideoPlayerStates;
     player: VideoPlayer;
 }) {
-    const [progressWidth, setProgressWidth] = useState(0);
-    const [dragValue, setDragValue] = useState(0);
-
-    useEffect(() => {
-        setProgressWidth((prevWidth) => Math.min(prevWidth + dragValue, 100));
-    }, [dragValue]);
-
-    //A ref for holding the progress bar width after the onLayout event has fired
-    const progressBarWidth = useRef<number>(0);
-    const accumulatedDragValueRef = useRef(0);
-
-    //a panresponder configuration for initializing the progress bar thumb/slider to respond to drag gestures
-    const videoProgressPan = useRef(
-        PanResponder.create({
-            onStartShouldSetPanResponder: () => true,
-            onMoveShouldSetPanResponder: () => true,
-            onPanResponderGrant: (e) => {
-                setVideoPlayerStates((prev) => ({
-                    ...prev,
-                    isDragging: true,
-                }));
-                console.log("access granted");
-                const touchX = e.nativeEvent.locationX;
-                const percentage = Math.max(
-                    0,
-                    Math.min(100, (touchX / progressBarWidth.current) * 100)
-                );
-                setDragValue(() => percentage);
-            },
-
-            onPanResponderMove: (e, gestureState) => {
-                //console.log("e.nativelocationX:", e.nativeEvent.locationX);
-                const touchX = e.nativeEvent.locationX;
-                const percentage = (touchX / progressBarWidth.current) * 100;
-                setDragValue(() => percentage);
-                accumulatedDragValueRef.current =
-                    (gestureState.dx / progressBarWidth.current) * 100;
-                console.log(
-                    "accumulated drag value in responder move:",
-                    accumulatedDragValueRef.current
-                );
-                setVideoPlayerStates((prev) => ({
-                    ...prev,
-                    duration: player.duration,
-                    currentTime: player.currentTime,
-                }));
-            },
-
-            onPanResponderRelease: () => {
-                setVideoPlayerStates((prev) => ({
-                    ...prev,
-                    isLoading: false,
-                    isDragging: false,
-                }));
-                if (player.playing) {
-                    setVideoPlayerStates((prev) => ({
-                        ...prev,
-                        isPlaying: player.playing,
-                    }));
-                } else {
-                    setVideoPlayerStates((prev) => ({
-                        ...prev,
-                        isPlaying: false,
-                    }));
-                }
-
-                console.log(
-                    "accumulated drag",
-                    accumulatedDragValueRef.current
-                );
-                const seconds =
-                    (accumulatedDragValueRef.current / 100) * player.duration;
-                seekForward(seconds);
-                console.log("seconds in responder release:", seconds);
-            },
-        })
-    ).current;
-
-    const seekForward = (seconds: number) => {
-        player.seekBy(seconds);
-        console.log("tried seeking by", seconds, "seconds");
-
-        accumulatedDragValueRef.current = 0;
-    };
+    const [isDragging, setIsDragging] = useState(false);
+    const currentProgressWidth = useSharedValue(0);
+    const progressBarWidth = useSharedValue(0);
+    const currentStartX = useSharedValue(0);
 
     useEffect(() => {
         const subscriptions = [
@@ -113,11 +39,11 @@ export default function VideoProgressBar({
             if (
                 player.playing &&
                 player.status === "readyToPlay" &&
-                !videoPlayerStates.isDragging
+                !isDragging
             ) {
-                setProgressWidth(
-                    () => (player.currentTime / player.duration) * 100
-                );
+                currentProgressWidth.value =
+                    (player.currentTime / player.duration) *
+                    progressBarWidth.value;
                 setVideoPlayerStates((prev) => ({
                     ...prev,
                     currentTime: player.currentTime,
@@ -133,35 +59,78 @@ export default function VideoProgressBar({
             clearInterval(currentTimeIntervalId);
         };
     });
+
+    const handleSeeking = () => {
+        try {
+            const newPos =
+                (currentProgressWidth.value / progressBarWidth.value) *
+                player.duration;
+            const newTime = newPos - player.currentTime;
+            player.seekBy(newTime);
+        } catch (error) {
+            console.log("failed to seek to time:", error);
+        }
+    };
+
+    const setOutsideState = (state: boolean) => {
+        setVideoPlayerStates((prev) => ({
+            ...prev,
+            isDragging: state,
+        }));
+    };
+
+    //Gesture API for configuring functions to call on gesture event
+    const handleDragStart = Gesture.Pan()
+        .onStart(() => {
+            currentStartX.value = currentProgressWidth.value;
+            runOnJS(setIsDragging)(true);
+            runOnJS(setOutsideState)(true);
+        })
+        .onUpdate((e) => {
+            currentProgressWidth.value = Math.max(
+                0,
+                Math.min(
+                    currentStartX.value + e.translationX,
+                    progressBarWidth.value
+                )
+            );
+        })
+        .onEnd(() => {
+            runOnJS(setIsDragging)(false);
+
+            runOnJS(handleSeeking)();
+            runOnJS(setOutsideState)(false);
+        })
+        .minDistance(0) // Allow immediate response
+        .maxPointers(1) // Only allow single touch
+        .runOnJS(false);
+
+    const thumbSlider = useAnimatedStyle(() => {
+        return {
+            transform: [{ scale: videoPlayerStates.isDragging ? 1.4 : 1 }],
+        };
+    });
+    const progressFill = useAnimatedStyle(() => {
+        return {
+            width: currentProgressWidth.value,
+        };
+    });
+
     return (
         <View style={styles.videoProgressContainer}>
             <View
                 style={styles.videoProgressBar}
                 onLayout={(event) => {
-                    progressBarWidth.current = event.nativeEvent.layout.width;
+                    progressBarWidth.value = event.nativeEvent.layout.width;
                 }}
             >
-                <View
-                    style={[
-                        styles.videoProgressBar2,
-                        { width: `${progressWidth}%` },
-                    ]}
-                ></View>
-                <View
-                    style={[
-                        styles.videoProgressSlider,
-                        {
-                            transform: [
-                                {
-                                    scale: videoPlayerStates.isDragging
-                                        ? 1.4
-                                        : 1,
-                                },
-                            ],
-                        },
-                    ]}
-                    {...videoProgressPan.panHandlers}
-                ></View>
+                <Animated.View style={[styles.progressFill, progressFill]} />
+
+                <GestureDetector gesture={handleDragStart}>
+                    <Animated.View
+                        style={[styles.videoProgressSlider, thumbSlider]}
+                    ></Animated.View>
+                </GestureDetector>
             </View>
         </View>
     );
@@ -183,13 +152,13 @@ const styles = StyleSheet.create({
         height: 3,
         backgroundColor: "#b9b9b9",
     },
-    videoProgressBar2: {
+    progressFill: {
         height: "100%",
         backgroundColor: "red",
     },
     videoProgressSlider: {
-        width: 10,
-        height: 10,
+        width: 13,
+        height: 13,
         borderRadius: 9999,
         backgroundColor: "rgba(255, 0, 0,1)",
     },
