@@ -67,6 +67,7 @@ export default function Watch() {
     const hideTimeoutRef = useRef<NodeJS.Timeout | null | number>(null);
     const playPauseRef = useRef([]);
     const [likeStatus, setLikeStatus] = useState<string>("");
+    const videoKey = useRef("video player").current;
 
     //initializing a video player from expo-video
     const player = useVideoPlayer(
@@ -113,7 +114,11 @@ export default function Watch() {
         showControls();
         if (hideTimeoutRef.current) clearTimeout(hideTimeoutRef.current);
 
-        if (!player.playing || player.status !== "readyToPlay")
+        if (
+            !player.playing ||
+            player.status !== "readyToPlay" ||
+            videoPlayerStates.isDragging
+        )
             opacity.setValue(1);
         else {
             if (hideTimeoutRef.current) clearTimeout(hideTimeoutRef.current);
@@ -124,7 +129,7 @@ export default function Watch() {
         return () => {
             if (hideTimeoutRef.current) clearTimeout(hideTimeoutRef.current);
         };
-    }, [player.playing, player.status]);
+    }, [player.playing, player.status, videoPlayerStates.isDragging]);
 
     const handleOverlayPress = (e: GestureResponderEvent) => {
         e.stopPropagation();
@@ -209,7 +214,6 @@ export default function Watch() {
         else if (arr0[1] === 10) temp1 = "Oct";
         else if (arr0[1] === 11) temp1 = "Nov";
         else if (arr0[1] === 12) temp1 = "Dec";
-        console.log(arr);
         return `${temp} ${temp1} ${arr0[2]}`;
     };
 
@@ -247,9 +251,14 @@ export default function Watch() {
                 </View>
             </View>
 
-            <View style={styles.videoContainer}>
+            <View
+                style={styles.videoContainer}
+                onStartShouldSetResponder={() => true}
+                collapsable={false}
+            >
                 <VideoView
                     ref={videoRef}
+                    key={videoKey}
                     player={player}
                     style={styles.video}
                     contentFit="contain"
@@ -259,19 +268,22 @@ export default function Watch() {
                     style={[styles.pressableOverlay]}
                     onPress={handleOverlayPress}
                 >
-                    <Animated.View
-                        pointerEvents={visible ? "auto" : "none"}
-                        style={[styles.animatedOverlay, { opacity: opacity }]}
+                    <LinearGradient
+                        ref={overlayRef}
+                        style={styles.videoOverlay}
+                        colors={[
+                            "rgba(25,25,25, 0.9)",
+                            "rgba(220,220, 220, 0)",
+                        ]}
+                        start={{ x: 0.5, y: 1 }}
+                        end={{ x: 0.5, y: 0.8 }}
                     >
-                        <LinearGradient
-                            ref={overlayRef}
-                            style={styles.videoOverlay}
-                            colors={[
-                                "rgba(25,25,25, 0.9)",
-                                "rgba(220,220, 220, 0)",
+                        <Animated.View
+                            pointerEvents={visible ? "auto" : "none"}
+                            style={[
+                                styles.animatedOverlay,
+                                { opacity: opacity },
                             ]}
-                            start={{ x: 0.5, y: 1 }}
-                            end={{ x: 0.5, y: 0.8 }}
                         >
                             <View style={styles.loadingIndicatorContainer}>
                                 {player.status !== "readyToPlay" ? (
@@ -384,8 +396,8 @@ export default function Watch() {
                                     />
                                 </View>
                             </View>
-                        </LinearGradient>
-                    </Animated.View>
+                        </Animated.View>
+                    </LinearGradient>
                 </TouchableOpacity>
             </View>
 
@@ -396,13 +408,11 @@ export default function Watch() {
                         : mainMovieSelected.title}
                 </Text>
                 {movieType === "seasonMovie" &&
-                selectedEpisode.episode !== null ? (
-                    <Text
-                        style={{ color: "rgb(220, 0, 0)" }}
-                    >{`Episode ${selectedEpisode.episode}`}</Text>
-                ) : (
-                    ""
-                )}
+                    selectedEpisode.episode !== null && (
+                        <Text
+                            style={{ color: "rgb(220, 0, 0)" }}
+                        >{`Episode ${selectedEpisode.episode}`}</Text>
+                    )}
             </View>
             <View style={styles.extraInfoContainer}>
                 <View style={styles.avatarPoster}>
@@ -509,11 +519,13 @@ const styles = StyleSheet.create({
         borderRadius: 12,
         marginTop: 12,
         overflow: "hidden",
+        zIndex: 2,
     },
     video: {
         width: "100%",
         height: "100%",
         borderRadius: 12,
+        opacity: 1,
     },
     videoOverlay: {
         position: "absolute",
@@ -526,6 +538,8 @@ const styles = StyleSheet.create({
     },
     animatedOverlay: {
         position: "absolute",
+        justifyContent: "center",
+        alignItems: "center",
         width: "100%",
         height: "100%",
     },
